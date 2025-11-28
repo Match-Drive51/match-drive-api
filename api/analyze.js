@@ -1,9 +1,9 @@
 const { ApifyClient } = require('apify-client');
 
-export default async function handler(req, res) {
-    // CORS : Autorise ton site à parler au serveur
+module.exports = async (req, res) => {
+    // CORS
     res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*'); // Pour le test. Lundi on mettra 'https://www.match-drive.com'
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader(
         'Access-Control-Allow-Headers',
@@ -16,36 +16,32 @@ export default async function handler(req, res) {
     }
 
     const { url } = req.body;
-    const token = process.env.APIFY_TOKEN; // La clé sera stockée dans Vercel
+    // ATTENTION : Token à récupérer
+    const token = process.env.APIFY_TOKEN;
 
-    if (!token) return res.status(500).json({ error: 'Token API manquant' });
+    if (!token) return res.status(500).json({ error: 'Token API manquant (Check Vercel Env)' });
     if (!url) return res.status(400).json({ error: 'URL manquante' });
 
     const client = new ApifyClient({ token: token });
 
     try {
-        // Lancement du Scraper Mobile.de (Actor: 5rqwyghNIbO6VMnlX)
-        // On utilise une config simplifiée pour aller vite
         const run = await client.actor("5rqwyghNIbO6VMnlX").call({
             startUrls: [{ url: url }],
             maxItems: 1,
-            proxyConfiguration: { useApifyProxy: true } // Indispensable pour mobile.de
+            proxyConfiguration: { useApifyProxy: true }
         });
 
-        // Récupération des données
         const { items } = await client.dataset(run.defaultDatasetId).listItems();
         
-        if (items.length === 0) return res.status(404).json({ error: 'Aucune voiture trouvée' });
+        if (!items || items.length === 0) return res.status(404).json({ error: 'Aucune voiture trouvée' });
 
         const car = items[0];
 
-        // Nettoyage des données pour ton frontend
-        // Note: Apify renvoie parfois des champs différents selon l'annonce. On sécurise.
         const cleanData = {
             titre: car.title || "Véhicule Import",
             prix: car.price || 0,
-            co2: car.emissionsCO2 || 150, // Valeur refuge
-            cv: car.powerKW ? Math.round(car.powerKW * 1.36 / 10) : 10, // Calcul CV approx (kW * 1.36 / 10)
+            co2: car.emissionsCO2 || 150,
+            cv: car.powerKW ? Math.round(car.powerKW * 1.36 / 10) : 10,
             date: car.firstRegistration || "2020-01",
             image: car.images ? car.images[0] : null
         };
@@ -56,4 +52,4 @@ export default async function handler(req, res) {
         console.error("Erreur Apify:", error);
         res.status(500).json({ error: error.message });
     }
-}
+};
